@@ -105,7 +105,7 @@ class Bank {
 
 			const data = JSON.stringify(this.accounts, null, 2);
 			fs.writeFileSync(DB_FILEPATH, data, 'utf8');
-			console.log('Transaction committed');
+			console.log('Transaction committed, ready for backup.');
 		}
 	}
 	backup() {
@@ -127,12 +127,13 @@ class Bank {
 	}
 }
 
-client.once('ready', () => {
+client.once('ready', async () => {
 	bank = new Bank();
-	console.log('Bot is online!');
+	logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
 });
 
 client.on('interactionCreate', async interaction => {
+	const startTime = performance.now();
 	if (!interaction.isCommand()) {
 		return;
 	}
@@ -140,11 +141,6 @@ client.on('interactionCreate', async interaction => {
 	// Gather info.
 	const user = interaction.user, userId = user.id, username = user.globalName;
 	const guild = interaction.guild, guildId = guild.id, guildName = guild.name;
-
-	// Fetch the log channel.
-	if (!logChannel) {
-		logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
-	}
 
 	// Handle closed beta testing.
 	if (!isAdmin(userId)) {
@@ -312,21 +308,15 @@ client.on('interactionCreate', async interaction => {
 		case 'baltop': case 'top': case 'leaderboard': {
 			const leaderboard = (await Promise.all(
 				Object.entries(bank.accounts)
-					.sort(([, a], [, b]) => b - a) // Sort by values in descending order
+					.sort(([, a], [, b]) => b - a)
 					.slice(0, BALTOP_PLACES)
-					.map(async ([id, bal], i) => {
-						let name = id;
-						try {
-							name = (await client.users.fetch(id)).globalName;
-							if (name == null) {
-								name = 'CommonCoin';
-							}
-						} catch (error) {
-							console.error(`Could not fetch user with ID ${id}`);
-						}
+					.map(([id, bal]) => ({ userPromise: client.users.fetch(id), id, bal }))
+					.map(async ({userPromise, id, bal}, i) => {
+						const user = await userPromise;
+						const name = (user) ? user.globalName : id;
 						return `${i+1}. ${displayMoney(bal)}: \`${name}\``;
 					})
-			)).join('\n');
+				)).join('\n');
 
 			await interaction.reply({
 				embeds: [{
@@ -363,10 +353,15 @@ client.on('interactionCreate', async interaction => {
 
 	// Allow bot execution to continue.
 	releaseLock();
+
+	const timeSeconds = (performance.now() - startTime) / 1000;
+	console.log(`Command completed after ${timeSeconds.toFixed(4)} seconds.`);
 });
 
 // Start the bot.
 const startBot = async () => {
+	const startTime = performance.now();
+
 	await deploy();
 	await client.login(TOKEN);
 
@@ -376,6 +371,9 @@ const startBot = async () => {
 		bank.backup();
 		releaseLock();
 	}, BACKUP_INTERVAL);
+
+	const timeSeconds = (performance.now() - startTime) / 1000;
+	console.log(`Bot started after ${timeSeconds.toFixed(4)} seconds.`);
 };
 
 startBot().then();
