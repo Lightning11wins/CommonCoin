@@ -71,6 +71,12 @@ const commands = [
 				description: 'The amount of money being sent.',
 				required: true,
 			},
+			{
+				type: Type.user,
+				name: 'user',
+				description: 'The player to whom minted money is given.',
+				required: true,
+			},
 		]
 	},
 	{

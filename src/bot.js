@@ -286,19 +286,20 @@ client.on('interactionCreate', async interaction => {
 			}
 
 			// Calculations.
+			const recipient = interaction.options.getUser('user'), recipientId = recipient.id, recipientUsername = recipient.globalName;
 			const amount = toNumber(interaction.options.getNumber('amount'));
 			const userBal = bank.getBal(userId, username), newBal = userBal + amount;
 
 			// Make the transaction.
-			bank.setBal(userId, newBal);
+			bank.setBal(recipientId, newBal);
 			bank.commit();
 
 			// Logging.
-			const logPromise = log(`${guildName} (${guildId}): ${username} (${userId}) minted ${displayMoney(amount)} in exchange for diamonds deposited into the vault.`);
+			const logPromise = log(`${guildName} (${guildId}): ${username} (${userId}) minted ${displayMoney(amount)} for ${recipientUsername} (${recipientId}) in exchange for diamonds deposited into the vault.`);
 			await interaction.reply({
 				embeds: [{
 					title: "Common Coin Minted",
-					description: displayMoney(amount),
+					description: `Minted ${displayMoney(amount)} for ${recipientUsername}.`,
 					color: BRANDING_GOLD,
 				}],
 			});
