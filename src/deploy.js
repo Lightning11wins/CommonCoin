@@ -1,3 +1,4 @@
+
 const { REST, Routes } = require('discord.js');
 const { TOKEN, CLIENT_ID } = require('./secrets');
 
@@ -52,6 +53,12 @@ const commands = [
 				description: 'The amount of money being sent.',
 				required: true,
 			},
+			{
+				type: 3,
+				name: 'reason',
+				description: 'The reason for sending the money',
+				required: true,
+			}
 		],
 	},
 	{
@@ -90,7 +97,7 @@ const commands = [
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
-(async () => {
+const deploy = async () => {
 	try {
 		console.log('Started refreshing application (/) commands.');
 
@@ -100,4 +107,12 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 	} catch (error) {
 		console.error(error);
 	}
-})();
+};
+
+if (require.main === module) {
+	deploy().then();
+}
+
+module.exports = {
+	deploy
+};

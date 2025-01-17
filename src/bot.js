@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Client, GatewayIntentBits } = require('discord.js');
 const { TOKEN } = require('./secrets');
+const { deploy } = require('./deploy');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -11,8 +12,12 @@ const ALLOWED_DECIMALS = 2;
 const BACKUP_INTERVAL = 3600000;
 const BACKUP_PATH = 'backups';
 const BALTOP_PLACES = 5;
+const BRANDING_GOLD = 0xf9cc47;
 const DB_FILEPATH = 'accounts.json';
+const EPHEMERAL = 0b1000000;
 const LOG_CHANNEL_ID = '1327831162558615602';
+const MAX_REASON_LENGTH = 1024;
+const MIN_REASON_LENGTH = 16;
 const botId = '1329578684960739359';
 
 // In memory.
@@ -27,8 +32,26 @@ const displayMoney = (amount) => `:coin: **${toNumber(amount).toFixed(ALLOWED_DE
 
 const isAdmin = (id) => {
 	const idStr = id.toString();
-	return (idStr === '349274318196441088');
+	return (
+		idStr === '349274318196441088' || // Lightning
+		idStr === '973038141428629564'    // Ezran
+	);
 };
+
+// Function to wait for the db to be ready.
+const getLock = async () => {
+	// Wait for the bot to be ready.
+	while (busy) {
+		await busy;
+	}
+
+	// Lock the bot.
+	let releaseLock;
+	busy = new Promise((resolve) => releaseLock = () => { busy = undefined; resolve(); });
+
+	return releaseLock;
+};
+
 
 // Log.
 const log = async (msg) => {
@@ -53,11 +76,14 @@ class Bank {
 			console.error('Error reading or parsing the file:', error);
 			this.accounts = {};
 		}
+		this.dirty = false;
+		this.needsBackup = false;
 	}
 
 	getBal(userId, username) {
 		const { accounts } = this, id = userId.toString().trim();
 		if (accounts[id] === undefined) {
+			this.dirty = true;
 			log(`Added ${username} with balance of $0.00`).then();
 			return accounts[id] = 0;
 		}
@@ -68,24 +94,36 @@ class Bank {
 		if (accounts[id] === undefined) {
 			throw new Error('Setting nonexistent user ID: ' + id);
 		}
+
+		this.dirty = true;
 		accounts[id] = newBal;
 	}
 	commit() {
-		const data = JSON.stringify(this.accounts, null, 2);
-		fs.writeFileSync(DB_FILEPATH, data, 'utf8');
-		console.log('Transaction committed');
+		if (this.dirty) {
+			this.dirty = false;
+			this.needsBackup = true;
+
+			const data = JSON.stringify(this.accounts, null, 2);
+			fs.writeFileSync(DB_FILEPATH, data, 'utf8');
+			console.log('Transaction committed');
+		}
 	}
 	backup() {
-		const now = new Date();
-		const filename = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}` +
-			`_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}.json`;
-		const filepath = path.join(BACKUP_PATH, filename);
+		if (this.needsBackup) {
+			this.commit();
+			this.needsBackup = false;
 
-		const data = JSON.stringify(this.accounts, null, 2);
-		fs.writeFileSync(filepath, data, 'utf8');
-		console.log('Backup created');
+			const now = new Date();
+			const filename = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}` +
+				`_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}.json`;
+			const filepath = path.join(BACKUP_PATH, filename);
 
-		return filepath;
+			const data = JSON.stringify(this.accounts, null, 2);
+			fs.writeFileSync(filepath, data, 'utf8');
+			console.log('Backup created');
+
+			return filepath;
+		}
 	}
 }
 
@@ -99,28 +137,38 @@ client.on('interactionCreate', async interaction => {
 		return;
 	}
 
+	// Gather info.
+	const user = interaction.user, userId = user.id, username = user.globalName;
+	const guild = interaction.guild, guildId = guild.id, guildName = guild.name;
+
 	// Fetch the log channel.
 	if (!logChannel) {
 		logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
 	}
 
-	// Wait for the bot to be ready.
-	while (busy) {
-		await busy;
+	// Handle closed beta testing.
+	if (!isAdmin(userId)) {
+		await interaction.reply({
+			embeds: [{
+				title: 'Closed Beta Testing',
+				description: 'Sorry, the bot is currently in the closed beta testing phase.',
+				color: BRANDING_GOLD,
+			}],
+			flags: EPHEMERAL,
+		});
+		return;
 	}
 
-	// Lock the bot.
-	let resolveFunc;
-	busy = new Promise((resolve) => resolveFunc = resolve);
-
-	// Gather info.
-	const user = interaction.user, userId = user.id, username = user.globalName;
-	const guild = interaction.guild, guildId = guild.id, guildName = guild.name;
+	// Acquire the bot db lock, which is needed for reads and writes.
+	const releaseLock = await getLock();
 
 	// Parse the command.
 	switch (interaction.commandName) {
 		case 'whoami': {
-			await interaction.reply(`Your Discord UUID is: \`${userId}\``);
+			await interaction.reply({
+				content: `Your Discord UUID is: \`${userId}\``,
+				flags: EPHEMERAL,
+			});
 			break;
 		}
 		case 'bal': case 'balance': {
@@ -130,13 +178,14 @@ client.on('interactionCreate', async interaction => {
 			bank.commit();
 
 			const name = (id === userId || !param1) ? 'Your' : `\`${username}\``;
-			await interaction.reply(`${name} balance: ${displayMoney(balance)}`);
+			await interaction.reply({ content: `${name} balance: ${displayMoney(balance)}` });
 			break;
 		}
 		case 'pay': {
 			// Recipient info.
 			const recipient = interaction.options.getUser('user'), recipientId = recipient.id, recipientUsername = recipient.globalName;
 			const amount = toNumber(interaction.options.getNumber('amount'));
+			const reason = interaction.options.getString('reason');
 
 			// Calculations.
 			const userBal = bank.getBal(userId, username), recipientBal = bank.getBal(recipientId, username);
@@ -144,16 +193,70 @@ client.on('interactionCreate', async interaction => {
 
 			// Error checking.
 			if (amount <= 0) {
-				await interaction.reply(`Nice try, but ${displayMoney(amount)} is a negative number.`);
+				await interaction.reply({
+					embeds: [{
+						title: "Transfer Failed",
+						description: `Nice try, but ${displayMoney(amount)} is a negative number.`,
+						color: BRANDING_GOLD,
+					}],
+					flags: EPHEMERAL,
+				});
 				break;
 			}
 			if (newUserBal < 0) {
-				await interaction.reply(`${displayMoney(userBal)} - ${displayMoney(amount)} = ${displayMoney(newUserBal)}! (Going into debt is not allowed)`);
+				await interaction.reply({
+					embeds: [{
+						title: "Transfer Failed",
+						description: `${displayMoney(userBal)} - ${displayMoney(amount)} = ${displayMoney(newUserBal)}! (Going into debt is not allowed)`,
+						color: BRANDING_GOLD,
+					}],
+					flags: EPHEMERAL,
+				});
 				break;
 			}
 			if (recipientId === botId) {
-				await interaction.reply('Sorry, you can\'t send money to the economy bot.');
+				await interaction.reply({
+					embeds: [{
+						title: "Transfer Failed",
+						description: 'You cannot send money to the economy bot.',
+						color: BRANDING_GOLD,
+					}],
+					flags: EPHEMERAL,
+				});
 				break;
+			}
+			if (recipientId === userId) {
+				await interaction.reply({
+					embeds: [{
+						title: "Transfer Failed",
+						description: 'You cannot send money to yourself.',
+						color: BRANDING_GOLD,
+					}],
+					flags: EPHEMERAL,
+				});
+				break;
+			}
+			if (reason.length < MIN_REASON_LENGTH) {
+				await interaction.reply({
+					embeds: [{
+						title: "Transfer Failed",
+						description: `Your reason should be **at least ${MIN_REASON_LENGTH}** characters long.`,
+						color: BRANDING_GOLD,
+					}],
+					flags: EPHEMERAL,
+				});
+				return;
+			}
+			if (reason.length > MAX_REASON_LENGTH) {
+				await interaction.reply({
+					embeds: [{
+						title: "Transfer Failed",
+						description: `Your reason should be **at most ${MAX_REASON_LENGTH}** characters long.`,
+						color: BRANDING_GOLD,
+					}],
+					flags: EPHEMERAL,
+				});
+				return;
 			}
 
 			// Make the transaction.
@@ -162,14 +265,27 @@ client.on('interactionCreate', async interaction => {
 			bank.commit();
 
 			// Logging.
-			const logPromise = log(`${guildName} (${guildId}): \`${username}\` (${userId}) payed ${displayMoney(amount)} to \`${recipientUsername}\` (${recipientId})`);
-			await interaction.reply(`SUCCESS: Transferred ${displayMoney(amount)} from \`${username}\` (${userId}) to \`${recipientUsername}\` (${recipientId}). You now have ${displayMoney(newUserBal)}.`);
+			const logPromise = log(`${guildName} (${guildId}): \`${username}\` (${userId}) payed ${displayMoney(amount)} to \`${recipientUsername}\` (${recipientId}). Reason: ${reason}`);
+			await interaction.reply({
+				embeds: [{
+					title: "Common Coin Transferred",
+					description: [
+						`Transferred ${displayMoney(amount)} from \`${username}\` to \`${recipientUsername}\`.`,
+						`> **Reason**: ${reason}`,
+						`You now have ${displayMoney(newUserBal)}.`,
+					].join('\n'),
+					color: BRANDING_GOLD,
+				}],
+			});
 			await logPromise;
 			break;
 		}
 		case 'mint': {
 			if (!isAdmin(userId)) {
-				await interaction.reply('no lol :)');
+				await interaction.reply({
+					content: 'no lol :)',
+					flags: EPHEMERAL,
+				});
 				break;
 			}
 
@@ -183,7 +299,13 @@ client.on('interactionCreate', async interaction => {
 
 			// Logging.
 			const logPromise = log(`${guildName} (${guildId}): ${username} (${userId}) minted ${displayMoney(amount)} in exchange for diamonds deposited into the vault.`);
-			await interaction.reply(`SUCCESS: Minted ${displayMoney(amount)}.`);
+			await interaction.reply({
+				embeds: [{
+					title: "Common Coin Minted",
+					description: displayMoney(amount),
+					color: BRANDING_GOLD,
+				}],
+			});
 			await logPromise;
 			break;
 		}
@@ -202,11 +324,17 @@ client.on('interactionCreate', async interaction => {
 						} catch (error) {
 							console.error(`Could not fetch user with ID ${id}`);
 						}
-						return `> ${i+1}. ${displayMoney(bal)}: \`${name}\``;
+						return `${i+1}. ${displayMoney(bal)}: \`${name}\``;
 					})
 			)).join('\n');
 
-			await interaction.reply('### Baltop Leaderboard\n' + leaderboard);
+			await interaction.reply({
+				embeds: [{
+					title: "BalTop Leaderboard",
+					description: leaderboard,
+					color: BRANDING_GOLD,
+				}],
+			});
 			break;
 		}
 		case 'backup': {
@@ -221,19 +349,33 @@ client.on('interactionCreate', async interaction => {
 		}
 		case 'exit': {
 			if (!isAdmin(userId)) {
-				await interaction.reply('I\'d rather not, to be honest.');
+				await interaction.reply({
+					content: 'I\'d rather not, to be honest.',
+					flags: EPHEMERAL,
+				});
 				break;
 			}
 
+			await interaction.reply({ content: 'Process terminated.' });
 			throw new Error(`Process terminated by \`${username}\` (${userId}).`);
 		}
 	}
 
 	// Allow bot execution to continue.
-	busy = undefined;
-	resolveFunc();
+	releaseLock();
 });
 
-client.login(TOKEN).then();
+// Start the bot.
+const startBot = async () => {
+	await deploy();
+	await client.login(TOKEN);
 
-setInterval(() => bank.backup(), BACKUP_INTERVAL);
+	// Begin automatic backups.
+	setInterval(async () => {
+		const releaseLock = await getLock();
+		bank.backup();
+		releaseLock();
+	}, BACKUP_INTERVAL);
+};
+
+startBot().then();
