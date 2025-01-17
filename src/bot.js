@@ -11,7 +11,7 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const ALLOWED_DECIMALS = 2;
 const BACKUP_INTERVAL = 3600000;
 const BACKUP_PATH = 'backups';
-const BALTOP_PLACES = 5;
+const BALTOP_PLACES = 10;
 const BRANDING_GOLD = 0xf9cc47;
 const DB_FILEPATH = 'accounts.json';
 const EPHEMERAL = 0b1000000;
@@ -29,6 +29,8 @@ let logChannel = undefined;
 const magnitude = (10 ** ALLOWED_DECIMALS);
 const toNumber = (amount) => Math.round(Number(amount) * magnitude) / magnitude;
 const displayMoney = (amount) => `:coin: **${toNumber(amount).toFixed(ALLOWED_DECIMALS)}**`;
+
+const getName = (user) => user.globalName ?? user.username ?? user.tag ?? user.id ?? 'Unknown User';
 
 const isAdmin = (id) => {
 	const idStr = id.toString();
@@ -139,7 +141,7 @@ client.on('interactionCreate', async interaction => {
 	}
 
 	// Gather info.
-	const user = interaction.user, userId = user.id, username = user.globalName;
+	const user = interaction.user, userId = user.id, username = getName(user);
 	const guild = interaction.guild, guildId = guild.id, guildName = guild.name;
 
 	// Handle closed beta testing.
@@ -159,7 +161,8 @@ client.on('interactionCreate', async interaction => {
 	const releaseLock = await getLock();
 
 	// Parse the command.
-	switch (interaction.commandName) {
+	const { commandName } = interaction;
+	switch (commandName) {
 		case 'whoami': {
 			await interaction.reply({
 				content: `Your Discord UUID is: \`${userId}\``,
@@ -168,18 +171,18 @@ client.on('interactionCreate', async interaction => {
 			break;
 		}
 		case 'bal': case 'balance': {
-			const param1 = interaction.options.getUser('user');
-			const id = (param1 || user).id, username = (param1 || user).globalName;
+			const param1 = interaction.options.getUser('user'), target = param1 || user;
+			const id = target.id, username = getName(target);
 			const balance = bank.getBal(id, username);
 			bank.commit();
 
-			const name = (id === userId || !param1) ? 'Your' : `\`${username}\``;
+			const name = (id === userId || !param1) ? 'Your' : `\`${username}\`'s`;
 			await interaction.reply({ content: `${name} balance: ${displayMoney(balance)}` });
 			break;
 		}
 		case 'pay': case 'transfer': {
 			// Recipient info.
-			const recipient = interaction.options.getUser('user'), recipientId = recipient.id, recipientUsername = recipient.globalName;
+			const recipient = interaction.options.getUser('user'), recipientId = recipient.id, recipientUsername = getName(recipient);
 			const amount = toNumber(interaction.options.getNumber('amount'));
 			const reason = interaction.options.getString('reason');
 
@@ -286,9 +289,9 @@ client.on('interactionCreate', async interaction => {
 			}
 
 			// Calculations.
-			const recipient = interaction.options.getUser('user'), recipientId = recipient.id, recipientUsername = recipient.globalName;
+			const recipient = interaction.options.getUser('user'), recipientId = recipient.id, recipientUsername = getName(recipient);
 			const amount = toNumber(interaction.options.getNumber('amount'));
-			const userBal = bank.getBal(userId, username), newBal = userBal + amount;
+			const userBal = bank.getBal(recipientId, username), newBal = userBal + amount;
 
 			// Make the transaction.
 			bank.setBal(recipientId, newBal);
@@ -314,7 +317,7 @@ client.on('interactionCreate', async interaction => {
 					.map(([id, bal]) => ({ userPromise: client.users.fetch(id), id, bal }))
 					.map(async ({userPromise, id, bal}, i) => {
 						const user = await userPromise;
-						const name = (user) ? user.globalName : id;
+						const name = (user) ? getName(user) : id;
 						return `${i+1}. ${displayMoney(bal)}: \`${name}\``;
 					})
 				)).join('\n');
@@ -356,7 +359,7 @@ client.on('interactionCreate', async interaction => {
 	releaseLock();
 
 	const timeSeconds = (performance.now() - startTime) / 1000;
-	console.log(`Command completed after ${timeSeconds.toFixed(4)} seconds.`);
+	console.log(`${commandName} completed after ${timeSeconds.toFixed(4)} seconds.`);
 });
 
 // Start the bot.
