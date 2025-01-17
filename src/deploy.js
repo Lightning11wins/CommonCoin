@@ -25,6 +25,18 @@ const commands = [
 		]
 	},
 	{
+		name: 'balance',
+		description: 'Display your current balance.',
+		options: [
+			{
+				type: Type.user,
+				name: 'user',
+				description: 'The player you\'re checking.',
+				required: false,
+			}
+		]
+	},
+	{
 		name: 'pay',
 		description: 'Pay money to another player.',
 		options: [
@@ -56,7 +68,15 @@ const commands = [
 	},
 	{
 		name: 'baltop',
-		description: 'Get your user id.',
+		description: 'Show the richest users on the server.',
+	},
+	{
+		name: 'top',
+		description: 'Show the richest users on the server.',
+	},
+	{
+		name: 'leaderboard',
+		description: 'Show the richest users on the server.',
 	},
 	{
 		name: 'backup',

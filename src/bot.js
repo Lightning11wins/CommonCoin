@@ -122,7 +122,7 @@ client.on('interactionCreate', async interaction => {
 			await interaction.reply(`Your Discord UUID is: \`${userId}\``);
 			break;
 		}
-		case 'bal': {
+		case 'bal': case 'balance': {
 			const param1 = interaction.options.getUser('user');
 			const id = (param1 || user).id, username = (param1 || user).globalName;
 			const balance = bank.getBal(id, username);
@@ -186,7 +186,7 @@ client.on('interactionCreate', async interaction => {
 			await logPromise;
 			break;
 		}
-		case 'baltop': {
+		case 'baltop': case 'top': case 'leaderboard': {
 			const leaderboard = (await Promise.all(
 				Object.entries(bank.accounts)
 					.sort(([, a], [, b]) => b - a) // Sort by values in descending order
