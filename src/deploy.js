@@ -62,6 +62,10 @@ const commands = [
 		name: 'backup',
 		description: 'Create a backup of the bank.',
 	},
+	{
+		name: 'exit',
+		description: 'Instantly shut down the bot.',
+	},
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);

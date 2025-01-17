@@ -218,6 +218,14 @@ client.on('interactionCreate', async interaction => {
 			await interaction.reply(`Backup created: \`${backupName}\``);
 			break;
 		}
+		case 'exit': {
+			if (!isAdmin(userId)) {
+				await interaction.reply('I\'d rather not, to be honest.');
+				break;
+			}
+
+			throw new Error(`Process terminated by \`${username}\` (${userId}).`);
+		}
 	}
 
 	// Allow bot execution to continue.
