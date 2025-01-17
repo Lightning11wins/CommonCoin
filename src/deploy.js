@@ -15,6 +15,14 @@ const commands = [
 	{
 		name: 'bal',
 		description: 'Display your current balance.',
+		options: [
+			{
+				type: Type.user,
+				name: 'user',
+				description: 'The player you\'re checking.',
+				required: false,
+			}
+		]
 	},
 	{
 		name: 'pay',
@@ -49,6 +57,10 @@ const commands = [
 	{
 		name: 'baltop',
 		description: 'Get your user id.',
+	},
+	{
+		name: 'backup',
+		description: 'Create a backup of the bank.',
 	},
 ];
 

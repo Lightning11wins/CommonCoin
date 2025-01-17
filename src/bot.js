@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const { Client, GatewayIntentBits } = require('discord.js');
 const { TOKEN } = require('./secrets');
+const path = require('node:path');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -10,6 +11,8 @@ const BACKUP_PATH = 'backups';
 const DB_FILEPATH = 'accounts.json';
 const LOG_CHANNEL_ID = '1327831162558615602';
 const ALLOWED_DECIMALS = 2;
+const BALTOP_PLACES = 5;
+const botId = '1329578684960739359';
 
 // In memory.
 let bank = undefined;
@@ -19,7 +22,12 @@ let logChannel = undefined;
 // Helpers.
 const magnitude = (10 ** ALLOWED_DECIMALS);
 const toNumber = (amount) => Math.round(Number(amount) * magnitude) / magnitude;
-const displayMoney = (amount) => `:coin: **${toNumber(amount)}**`;
+const displayMoney = (amount) => `:coin: **${toNumber(amount).toFixed(ALLOWED_DECIMALS)}**`;
+
+const isAdmin = (id) => {
+	const idStr = id.toString();
+	return (idStr === '349274318196441088');
+};
 
 // Log.
 const log = async (msg) => {
@@ -66,6 +74,18 @@ class Bank {
 		fs.writeFileSync(DB_FILEPATH, data, 'utf8');
 		console.log('Transaction committed');
 	}
+	backup() {
+		const now = new Date();
+		const filename = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}` +
+			`_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}.json`;
+		const filepath = path.join(BACKUP_PATH, filename);
+
+		const data = JSON.stringify(this.accounts, null, 2);
+		fs.writeFileSync(filepath, data, 'utf8');
+		console.log('Backup created');
+
+		return filepath;
+	}
 }
 
 client.once('ready', () => {
@@ -90,7 +110,7 @@ client.on('interactionCreate', async interaction => {
 
 	// Lock the bot.
 	let resolveFunc;
-	busy = new Promise((resolve, reject) => resolveFunc = resolve);
+	busy = new Promise((resolve) => resolveFunc = resolve);
 
 	// Gather info.
 	const user = interaction.user, userId = user.id, username = user.globalName;
@@ -99,14 +119,17 @@ client.on('interactionCreate', async interaction => {
 	// Parse the command.
 	switch (interaction.commandName) {
 		case 'whoami': {
-			await interaction.reply(`Your Discord UUID is: ${userId}`);
+			await interaction.reply(`Your Discord UUID is: \`${userId}\``);
 			break;
 		}
 		case 'bal': {
-			const money = bank.getBal(userId, username);
+			const param1 = interaction.options.getUser('user');
+			const id = (param1 || user).id, username = (param1 || user).globalName;
+			const balance = bank.getBal(id, username);
 			bank.commit();
 
-			await interaction.reply(`Your balance: ${displayMoney(money)}`);
+			const name = (id === userId || !param1) ? 'Your' : `\`${username}\``;
+			await interaction.reply(`${name} balance: ${displayMoney(balance)}`);
 			break;
 		}
 		case 'pay': {
@@ -120,11 +143,15 @@ client.on('interactionCreate', async interaction => {
 
 			// Error checking.
 			if (amount <= 0) {
-				await interaction.reply(`FAIL: Nice try, but ${displayMoney(amount)} is a negative number.`);
+				await interaction.reply(`Nice try, but ${displayMoney(amount)} is a negative number.`);
 				break;
 			}
 			if (newUserBal < 0) {
-				await interaction.reply(`FAIL: ${displayMoney(userBal)} - ${displayMoney(amount)} = ${displayMoney(newUserBal)}! (Going into debt is not allowed)`);
+				await interaction.reply(`${displayMoney(userBal)} - ${displayMoney(amount)} = ${displayMoney(newUserBal)}! (Going into debt is not allowed)`);
+				break;
+			}
+			if (recipientId === botId) {
+				await interaction.reply('Sorry, you can\'t send money to the economy bot.');
 				break;
 			}
 
@@ -134,13 +161,13 @@ client.on('interactionCreate', async interaction => {
 			bank.commit();
 
 			// Logging.
-			const logPromise = log(`${guildName} (${guildId}): ${username} (${userId}) payed ${displayMoney(amount)} to ${recipientUsername} (${recipientId})`);
-			await interaction.reply(`SUCCESS: Transferred ${displayMoney(amount)} from **${username}** (${userId}) to **${recipientUsername}** (${recipientId}). You now have ${displayMoney(newUserBal)}.`);
+			const logPromise = log(`${guildName} (${guildId}): \`${username}\` (${userId}) payed ${displayMoney(amount)} to \`${recipientUsername}\` (${recipientId})`);
+			await interaction.reply(`SUCCESS: Transferred ${displayMoney(amount)} from \`${username}\` (${userId}) to \`${recipientUsername}\` (${recipientId}). You now have ${displayMoney(newUserBal)}.`);
 			await logPromise;
 			break;
 		}
 		case 'mint': {
-			if (userId.toString() !== '349274318196441088') {
+			if (!isAdmin(userId)) {
 				await interaction.reply('no lol :)');
 				break;
 			}
@@ -163,18 +190,32 @@ client.on('interactionCreate', async interaction => {
 			const leaderboard = (await Promise.all(
 				Object.entries(bank.accounts)
 					.sort(([, a], [, b]) => b - a) // Sort by values in descending order
-					.map(async ([id, bal]) => {
+					.slice(0, BALTOP_PLACES)
+					.map(async ([id, bal], i) => {
+						let name = id;
 						try {
-							const user = await client.users.fetch(id);
-							return `${user.globalName}: ${displayMoney(bal)}`;
+							name = (await client.users.fetch(id)).globalName;
+							if (name == null) {
+								name = 'CommonCoin';
+							}
 						} catch (error) {
 							console.error(`Could not fetch user with ID ${id}`);
-							return `${id}: ${displayMoney(bal)}`;
 						}
+						return `> ${i+1}. ${displayMoney(bal)}: \`${name}\``;
 					})
-			)).join('\n');
+				)).join('\n');
 
-			await interaction.reply(`### Baltop Leaderboard\n${leaderboard}`);
+			await interaction.reply('### Baltop Leaderboard\n' + leaderboard);
+			break;
+		}
+		case 'backup': {
+			if (!isAdmin(userId)) {
+				await interaction.reply('Really?');
+				break;
+			}
+
+			const backupName = bank.backup();
+			await interaction.reply(`Backup created: \`${backupName}\``);
 			break;
 		}
 	}
@@ -184,4 +225,4 @@ client.on('interactionCreate', async interaction => {
 	resolveFunc();
 });
 
-client.login(TOKEN).then(r => console.log('login ended: '+ r));
+client.login(TOKEN).then();
