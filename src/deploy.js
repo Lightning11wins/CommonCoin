@@ -62,13 +62,37 @@ const commands = [
 		],
 	},
 	{
+		name: 'transfer',
+		description: 'Pay money to another player.',
+		options: [
+			{
+				type: Type.user,
+				name: 'user',
+				description: 'The player receiving the money.',
+				required: true,
+			},
+			{
+				type: Type.float,
+				name: 'amount',
+				description: 'The amount of money being sent.',
+				required: true,
+			},
+			{
+				type: 3,
+				name: 'reason',
+				description: 'The reason for sending the money',
+				required: true,
+			}
+		],
+	},
+	{
 		name: 'mint',
 		description: 'Mint new currency.',
 		options: [
 			{
 				type: Type.float,
 				name: 'amount',
-				description: 'The amount of money being sent.',
+				description: 'The amount of money being minted.',
 				required: true,
 			},
 			{

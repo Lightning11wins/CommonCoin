@@ -177,7 +177,7 @@ client.on('interactionCreate', async interaction => {
 			await interaction.reply({ content: `${name} balance: ${displayMoney(balance)}` });
 			break;
 		}
-		case 'pay': {
+		case 'pay': case 'transfer': {
 			// Recipient info.
 			const recipient = interaction.options.getUser('user'), recipientId = recipient.id, recipientUsername = recipient.globalName;
 			const amount = toNumber(interaction.options.getNumber('amount'));
