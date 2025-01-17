@@ -1,0 +1,24 @@
+{
+  "name": "commoncoin",
+  "version": "0.1.0",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy": "node src/deploy.js",
+    "start": "node src/bot.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/Lightning11wins/CommonCoin.git"
+  },
+  "author": "Lightning_11",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "bugs": {
+    "url": "https://github.com/Lightning11wins/CommonCoin/issues"
+  },
+  "homepage": "https://github.com/Lightning11wins/CommonCoin#readme",
+  "description": "",
+  "dependencies": {
+    "discord.js": "^14.17.3"
+  }
+}

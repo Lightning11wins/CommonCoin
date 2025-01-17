@@ -1,0 +1,4 @@
+# See: https://git-scm.com/docs/gitattributes
+#
+# Auto detect text files and perform line terminator normalization
+*	text=auto eol=lf
