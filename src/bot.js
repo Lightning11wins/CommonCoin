@@ -1,17 +1,18 @@
 
 const fs = require('node:fs');
+const path = require('node:path');
 const { Client, GatewayIntentBits } = require('discord.js');
 const { TOKEN } = require('./secrets');
-const path = require('node:path');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 // Configs.
+const ALLOWED_DECIMALS = 2;
+const BACKUP_INTERVAL = 3600000;
 const BACKUP_PATH = 'backups';
+const BALTOP_PLACES = 5;
 const DB_FILEPATH = 'accounts.json';
 const LOG_CHANNEL_ID = '1327831162558615602';
-const ALLOWED_DECIMALS = 2;
-const BALTOP_PLACES = 5;
 const botId = '1329578684960739359';
 
 // In memory.
@@ -203,7 +204,7 @@ client.on('interactionCreate', async interaction => {
 						}
 						return `> ${i+1}. ${displayMoney(bal)}: \`${name}\``;
 					})
-				)).join('\n');
+			)).join('\n');
 
 			await interaction.reply('### Baltop Leaderboard\n' + leaderboard);
 			break;
@@ -234,3 +235,5 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(TOKEN).then();
+
+setInterval(() => bank.backup(), BACKUP_INTERVAL);
