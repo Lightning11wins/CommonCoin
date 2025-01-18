@@ -17,6 +17,7 @@ const factions = [
 	{ name: 'Auditor', value: 'auditor'},
 	{ name: 'Blue Bird', value: 'blue_bird'},
 	{ name: 'Faelorn Darthulia', value: 'faelorn'},
+	{ name: 'Grand Kingdom of Khazabrar', value: 'dwarves'},
 	{ name: 'Kairengoku Empire', value: 'goku'},
 	{ name: 'Land of Awesomeness', value: 'awesome'},
 	{ name: 'Lunaria', value: 'lunaria'},
