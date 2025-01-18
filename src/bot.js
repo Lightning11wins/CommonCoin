@@ -5,6 +5,7 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const { TOKEN } = require('./secrets');
 const { deploy } = require('./deploy');
 
+const startTime = performance.now();
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 // Configs.
@@ -81,20 +82,19 @@ const discordLog = async (msg) => {
 
 class Bank {
 	constructor() {
-		localLog('Bank created.');
-		try {
-			const data = fs.readFileSync(DB_FILEPATH, 'utf8');
-			const accounts = this.accounts = JSON.parse(data);
-			Object.keys(accounts).forEach(userId => {
-				accounts[userId] = toNumber(accounts[userId]);
-			});
-			this.commit();
-		} catch (error) {
-			console.error('Error reading or parsing the file:', error);
-			this.accounts = {};
-		}
+		localLog('Constructing bank...');
+
+		const data = fs.readFileSync(DB_FILEPATH, 'utf8');
+		const accounts = this.accounts = JSON.parse(data);
+		Object.keys(accounts).forEach(userId => {
+			accounts[userId] = toNumber(accounts[userId]);
+		});
+
+		this.commit();
 		this.dirty = false;
 		this.needsBackup = false;
+
+		localLog('Bank created.');
 	}
 
 	getBal(userId, username) {
@@ -155,7 +155,9 @@ class Bank {
 client.once('ready', async () => {
 	bank = new Bank();
 	logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
-	localLog('Setup complete');
+
+	const timeSeconds = (performance.now() - startTime) / 1000;
+	localLog(`Bot started after ${timeSeconds.toFixed(4)} seconds.`);
 });
 
 // Bot command handling.
@@ -400,6 +402,19 @@ client.on('interactionCreate', async interaction => {
 			localLog(`${guildName} (${guildId}): ${username} (${userId}) checked the leaderboard with ${commandName}. SUCCESS`);
 			break;
 		}
+		case 'eco': case 'economy': {
+			const totalMoney = Object.values(bank.accounts).reduce((sum, value) => sum + value, 0);
+
+			await interaction.reply({
+				embeds: [{
+					title: "Economy Status",
+					description: 'Total Money: ' + displayMoney(totalMoney),
+					color: BRANDING_GOLD,
+				}],
+			});
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) checked the total money in the economy (${totalMoney}) with ${commandName}. SUCCESS`);
+			break;
+		}
 		case 'backup': {
 			if (!isAdmin(userId)) {
 				await interaction.reply('Really?');
@@ -436,7 +451,6 @@ client.on('interactionCreate', async interaction => {
 
 // Start the bot.
 const startBot = async () => {
-	const startTime = performance.now();
 
 	await deploy();
 	await client.login(TOKEN);
@@ -447,9 +461,6 @@ const startBot = async () => {
 		bank.backup();
 		releaseLock();
 	}, BACKUP_INTERVAL);
-
-	const timeSeconds = (performance.now() - startTime) / 1000;
-	localLog(`Bot started after ${timeSeconds.toFixed(4)} seconds.`);
 };
 
 startBot().then();

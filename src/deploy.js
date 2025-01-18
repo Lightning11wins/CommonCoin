@@ -119,6 +119,14 @@ const commands = [
 		description: 'Show the richest users on the server.',
 	},
 	{
+		name: 'eco',
+		description: 'Show the total money in circulation in the economy.',
+	},
+	{
+		name: 'economy',
+		description: 'Show the total money in circulation in the economy.',
+	},
+	{
 		name: 'backup',
 		description: 'Create a backup of the bank.',
 	},
