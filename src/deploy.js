@@ -6,10 +6,32 @@ const { TOKEN, CLIENT_ID } = require('./secrets');
 // https://discord.com/oauth2/authorize?client_id=1329578684960739359&permissions=67584&integration_type=0&scope=bot
 
 const Type = {
+	string: 3,
 	user: 6,
 	int: 4,
 	float: 10,
 };
+
+const factions = [
+	{ name: 'Astral Vanguard', value: 'astral'},
+	{ name: 'Auditor', value: 'auditor'},
+	{ name: 'Blue Bird', value: 'blue_bird'},
+	{ name: 'Faelorn Darthulia', value: 'faelorn'},
+	{ name: 'Kairengoku Empire', value: 'kairengoku'},
+	{ name: 'Land of Awesomeness', value: 'land_of_awesomeness'},
+	{ name: 'Lunaria', value: 'lunaria'},
+	{ name: 'Mjirr\'s Edge', value: 'mjirr_edge'},
+	{ name: 'Northwind', value: 'northwind'},
+	{ name: 'Phoenix Republic', value: 'phoenix'},
+	{ name: 'Reggionic Cult', value: 'reggie'},
+	{ name: 'Shiverbane', value: 'shiverbane'},
+	{ name: 'The Epic Alliance', value: 'epic'},
+	{ name: 'The Hand of Kravor', value: 'hand'},
+	{ name: 'The Knights of Camelot', value: 'knights'},
+	{ name: 'The Order of the Sun and Moon', value: 'the_order'},
+	{ name: 'Umbra', value: 'umbra'},
+	{ name: 'Gods', value: 'gods'},
+];
 
 const commands = [
 	{
@@ -57,7 +79,7 @@ const commands = [
 				required: true,
 			},
 			{
-				type: 3,
+				type: Type.string,
 				name: 'reason',
 				description: 'The reason for sending the money',
 				required: true,
@@ -81,7 +103,7 @@ const commands = [
 				required: true,
 			},
 			{
-				type: 3,
+				type: Type.string,
 				name: 'reason',
 				description: 'The reason for sending the money',
 				required: true,
@@ -107,16 +129,54 @@ const commands = [
 		]
 	},
 	{
+		name: 'setfaction',
+		description: 'Specify your faction so that your money is counted for their net worth on the faction leaderboard.',
+		options: [
+			{
+				type: Type.string,
+				name: 'faction',
+				description: 'Select a faction (DM Lightning_11 if your faction is missing)',
+				required: true,
+				choices: factions,
+			},
+		],
+	},
+	{
+		name: 'joinfaction',
+		description: 'Specify your faction so that your money is counted for their net worth on the faction leaderboard.',
+		options: [
+			{
+				type: Type.string,
+				name: 'faction',
+				description: 'Select a faction (DM Lightning_11 if your faction is missing)',
+				required: true,
+				choices: factions,
+			},
+		],
+	},
+	{
 		name: 'baltop',
-		description: 'Show the richest users on the server.',
+		description: 'Show the richest players on the server.',
 	},
 	{
 		name: 'top',
-		description: 'Show the richest users on the server.',
+		description: 'Show the richest players on the server.',
 	},
 	{
 		name: 'leaderboard',
-		description: 'Show the richest users on the server.',
+		description: 'Show the richest players on the server.',
+	},
+	{
+		name: 'fbaltop',
+		description: 'Show the richest factions on the server.',
+	},
+	{
+		name: 'ftop',
+		description: 'Show the richest factions on the server.',
+	},
+	{
+		name: 'fleaderboard',
+		description: 'Show the richest factions on the server.',
 	},
 	{
 		name: 'eco',
@@ -155,5 +215,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-	deploy
+	deploy,
+	factions,
 };

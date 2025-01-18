@@ -3,9 +3,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Client, GatewayIntentBits } = require('discord.js');
 const { TOKEN } = require('./secrets');
-const { deploy } = require('./deploy');
+const { deploy, factions } = require('./deploy');
 
 const startTime = performance.now();
+const factionsNames = factions.map(faction => faction.value);
+const factionsNameMap = factions.reduce((nameMap, {name, value}) => {
+	nameMap[value] = name;
+	return nameMap;
+}, {});
+factionsNameMap.unaffiliated = 'Unaffiliated';
+
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 // Configs.
@@ -17,7 +24,7 @@ const BALTOP_PLACES = 10;
 const BRANDING_GOLD = 0xf9cc47;
 const DB_FILEPATH = 'accounts.json';
 const EPHEMERAL = 0b1000000;
-const LOG_CHANNEL_ID = '1327831162558615602';
+const LOG_CHANNEL_ID = '1327831162558615602'; // 1330272746667511850 - Real Channel
 const MAX_REASON_LENGTH = 1024;
 const MIN_REASON_LENGTH = 16;
 const botId = '1329578684960739359';
@@ -72,7 +79,7 @@ const localLog = (msg) => {
 	fs.appendFile(logFilename, entry, errorHandler);
 };
 const discordLog = async (msg) => {
-	console.log('DISCORD LOG: ' + msg);
+	console.log('DISCORD LOG: ' + JSON.stringify(msg));
 	try {
 		await logChannel.send(msg);
 	} catch (error) {
@@ -87,7 +94,12 @@ class Bank {
 		const data = fs.readFileSync(DB_FILEPATH, 'utf8');
 		const accounts = this.accounts = JSON.parse(data);
 		Object.keys(accounts).forEach(userId => {
-			accounts[userId] = toNumber(accounts[userId]);
+			const account = accounts[userId], factionName = account[1];
+			if (factionName && !factionsNames.includes(factionName)) {
+				localLog(`WARNING: ${userId} is a member of unknown faction ${factionName}.`);
+			}
+
+			console.log(accounts[userId] = [toNumber(account[0]), factionName]);
 		});
 
 		this.commit();
@@ -98,7 +110,7 @@ class Bank {
 	}
 
 	get totalMoney() {
-		return Object.values(bank.accounts).reduce((sum, value) => sum + value, 0);
+		return Object.values(bank.accounts).reduce((sum, value) => sum + value[0], 0);
 	}
 
 	getBal(userId, username) {
@@ -113,12 +125,11 @@ class Bank {
 					color: BRANDING_GOLD,
 				}],
 			}).then();
-			return accounts[id] = 0;
+			return accounts[id] = [0];
 		}
-		return accounts[id];
+		return accounts[id][0];
 	}
 	setBal(userId, newBal) {
-		localLog('Bank created.');
 		const { accounts } = this, id = userId.toString().trim();
 		if (accounts[id] === undefined) {
 			throw new Error('Setting nonexistent user ID: ' + id);
@@ -126,7 +137,16 @@ class Bank {
 
 		localLog(`Set balance of ${userId} to ${newBal}.`);
 		this.dirty = true;
-		accounts[id] = newBal;
+		accounts[id][0] = newBal;
+	}
+	getFaction(userId) {
+		const id = userId.toString().trim();
+		return this.accounts[id][1] ?? 'Unaffiliated';
+	}
+	setFaction(userId, factionName) {
+		const id = userId.toString().trim();
+		this.dirty = true;
+		this.accounts[id][1] = factionName;
 	}
 	commit() {
 		if (this.dirty) {
@@ -175,20 +195,6 @@ client.on('interactionCreate', async interaction => {
 	const user = interaction.user, userId = user.id, username = getName(user);
 	const guild = interaction.guild, guildId = guild.id, guildName = guild.name;
 
-	// Handle closed beta testing.
-	if (!isAdmin(userId)) {
-		await interaction.reply({
-			embeds: [{
-				title: 'Closed Beta Testing',
-				description: 'Sorry, the bot is currently in the closed beta testing phase.',
-				color: BRANDING_GOLD,
-			}],
-			flags: EPHEMERAL,
-		});
-		localLog(`Blocked ${username} (${userId}), who is not a member of the closed beta. FAIL`);
-		return;
-	}
-
 	// Acquire the bot db lock, which is needed for reads and writes.
 	const releaseLock = await getLock();
 
@@ -200,7 +206,7 @@ client.on('interactionCreate', async interaction => {
 				content: `Your Discord UUID is: \`${userId}\``,
 				flags: EPHEMERAL,
 			});
-			localLog(`${guildName} (${guildId}): ${username} (${userId}) used ${commandName}. SUCCESS`);
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) used /${commandName}. SUCCESS`);
 			break;
 		}
 		case 'bal': case 'balance': {
@@ -208,11 +214,21 @@ client.on('interactionCreate', async interaction => {
 			const id = target.id, targetUsername = getName(target);
 
 			const balance = bank.getBal(id, targetUsername);
+			const factionName = factionsNameMap[bank.getFaction(userId)] ?? 'Unaffiliated';
 			bank.commit();
 
 			const name = (id === userId || !param1) ? 'Your' : `\`${targetUsername}\`'s`;
-			await interaction.reply({ content: `${name} balance: ${displayMoney(balance)}` });
-			localLog(`${guildName} (${guildId}): ${username} (${userId}) used ${commandName} on ${targetUsername}. SUCCESS`);
+			await interaction.reply({
+				embeds: [{
+					title: 'Bank Account Status',
+					description: [
+						`${name} balance: ${displayMoney(balance)}`,
+						`Faction: **${factionName}**`,
+					].join('\n'),
+					color: BRANDING_GOLD,
+				}],
+			});
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) used /${commandName} on ${targetUsername}. SUCCESS`);
 			break;
 		}
 		case 'pay': case 'transfer': {
@@ -235,7 +251,7 @@ client.on('interactionCreate', async interaction => {
 					}],
 					flags: EPHEMERAL,
 				});
-				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because amount was ${amount}. FAIL`);
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use /${commandName} because amount was ${amount}. FAIL`);
 				break;
 			}
 			if (newUserBal < 0) {
@@ -247,7 +263,7 @@ client.on('interactionCreate', async interaction => {
 					}],
 					flags: EPHEMERAL,
 				});
-				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because ${userBal} - ${amount} = ${newUserBal}. (Going into debt is not allowed.) FAIL`);
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use /${commandName} because ${userBal} - ${amount} = ${newUserBal}. (Going into debt is not allowed.) FAIL`);
 				break;
 			}
 			if (recipientId === botId) {
@@ -259,7 +275,7 @@ client.on('interactionCreate', async interaction => {
 					}],
 					flags: EPHEMERAL,
 				});
-				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because you cannot transfer money to the economy bot. FAIL`);
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use /${commandName} because you cannot transfer money to the economy bot. FAIL`);
 				break;
 			}
 			if (recipientId === userId) {
@@ -271,7 +287,7 @@ client.on('interactionCreate', async interaction => {
 					}],
 					flags: EPHEMERAL,
 				});
-				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because you cannot transfer money to yourself. FAIL`);
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use /${commandName} because you cannot transfer money to yourself. FAIL`);
 				break;
 			}
 			if (reason.length < MIN_REASON_LENGTH) {
@@ -283,7 +299,7 @@ client.on('interactionCreate', async interaction => {
 					}],
 					flags: EPHEMERAL,
 				});
-				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because the reason was shorter than the min length (${reason.length} < ${MIN_REASON_LENGTH}. FAIL\n> Reason: ${reason}`);
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use /${commandName} because the reason was shorter than the min length (${reason.length} < ${MIN_REASON_LENGTH}). FAIL\n> Reason: ${reason}`);
 				return;
 			}
 			if (reason.length > MAX_REASON_LENGTH) {
@@ -295,7 +311,7 @@ client.on('interactionCreate', async interaction => {
 					}],
 					flags: EPHEMERAL,
 				});
-				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because the reason was longer than the max length (${reason.length} > ${MAX_REASON_LENGTH}). FAIL\n> Reason: ${reason}`);
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use /${commandName} because the reason was longer than the max length (${reason.length} > ${MAX_REASON_LENGTH}). FAIL\n> Reason: ${reason}`);
 				return;
 			}
 
@@ -331,7 +347,7 @@ client.on('interactionCreate', async interaction => {
 					color: BRANDING_GOLD,
 				}],
 			});
-			localLog(`${guildName} (${guildId}): ${username} (${userId}) transferred ${amount} to ${recipientUsername} (${recipientId}) with ${commandName}. SUCCESS\n> Reason: ${reason}`);
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) transferred ${amount} to ${recipientUsername} (${recipientId}) with /${commandName}. SUCCESS\n> Reason: ${reason}`);
 			await logPromise;
 			break;
 		}
@@ -367,7 +383,7 @@ client.on('interactionCreate', async interaction => {
 						'Location: ' + guildName,
 						'',
 						'The corresponding quantity of diamonds has been',
-						'deposited into The Guild\'s central vault.',
+						'deposited into The United Exchange central vault.',
 					].join('\n'),
 					color: BRANDING_GOLD,
 				}],
@@ -383,13 +399,41 @@ client.on('interactionCreate', async interaction => {
 			await logPromise;
 			break;
 		}
+		case 'setfaction': case 'joinfaction': {
+			// Input parsing and validation.
+			const factionName = interaction.options.getString('faction');
+			if (!factionsNames.includes(factionName)) {
+				await interaction.reply({
+					content: `Unknown faction \`${factionName}\`. Please contact \`Lightning_11\` to have your faction added if it is missing from the list.`,
+					flags: EPHEMERAL,
+				});
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) attempted to join unknown faction ${factionName} using /${commandName}. FAIL`);
+				break;
+			}
+
+			// Set the user's faction.
+			bank.setFaction(userId, factionName);
+			bank.commit();
+
+			// Respond.
+			await interaction.reply({
+				embeds: [{
+					title: `Faction Set`,
+					description: `New Faction: \`${factionsNameMap[factionName]}\`.`,
+					color: BRANDING_GOLD,
+				}],
+				flags: EPHEMERAL,
+			});
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) joined the ${factionName} faction using /${commandName}. SUCCESS`);
+			break;
+		}
 		case 'baltop': case 'top': case 'leaderboard': {
 			const { totalMoney } = bank;
 			const leaderboard = (await Promise.all(
 				Object.entries(bank.accounts)
-					.sort(([, a], [, b]) => b - a)
+					.sort(([, [a]], [, [b]]) => b - a)
 					.slice(0, BALTOP_PLACES)
-					.map(([id, bal]) => ({ userPromise: client.users.fetch(id), id, bal }))
+					.map(([id, [bal, ]]) => ({ userPromise: client.users.fetch(id), id, bal }))
 					.map(async ({userPromise, id, bal}, i) => {
 						const user = await userPromise;
 						const name = (user) ? getName(user) : id;
@@ -405,7 +449,34 @@ client.on('interactionCreate', async interaction => {
 					color: BRANDING_GOLD,
 				}],
 			});
-			localLog(`${guildName} (${guildId}): ${username} (${userId}) checked the leaderboard with ${commandName}. SUCCESS`);
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) checked the leaderboard with /${commandName}. SUCCESS`);
+			break;
+		}
+		case 'fbaltop': case 'ftop': case 'fleaderboard': {
+			const { totalMoney } = bank;
+			const factionValues = Object.values(bank.accounts)
+				.reduce((factions, [money, factionName]) => {
+					const factionKey = factionName ?? 'unaffiliated';
+					factions[factionKey] = (factions[factionKey] || 0) + money;
+					return factions;
+				}, {});
+
+			const leaderboard = Object.entries(factionValues)
+				.sort(([, a], [, b]) => b - a)
+				.slice(0, BALTOP_PLACES)
+				.map(([factionMame, bal], i) => {
+					const percentage = ((bal / totalMoney) * 100).toFixed(2);
+					return `${i+1}. ${displayMoney(bal)} (${percentage}%): \`${factionsNameMap[factionMame]}\``;
+				}).join('\n');
+
+			await interaction.reply({
+				embeds: [{
+					title: "Faction Leaderboard",
+					description: leaderboard,
+					color: BRANDING_GOLD,
+				}],
+			});
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) checked the faction leaderboard with /${commandName}. SUCCESS`);
 			break;
 		}
 		case 'eco': case 'economy': {
@@ -418,7 +489,7 @@ client.on('interactionCreate', async interaction => {
 					color: BRANDING_GOLD,
 				}],
 			});
-			localLog(`${guildName} (${guildId}): ${username} (${userId}) checked the total money in the economy (${totalMoney}) with ${commandName}. SUCCESS`);
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) checked the total money in the economy (${totalMoney}) with /${commandName}. SUCCESS`);
 			break;
 		}
 		case 'backup': {
@@ -429,7 +500,7 @@ client.on('interactionCreate', async interaction => {
 
 			const backupName = bank.backup();
 			await interaction.reply({ content: `Backup created: \`${backupName}\`` });
-			localLog(`${guildName} (${guildId}): ${username} (${userId}) issued ${commandName} to create a backup. SUCCESS`);
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) issued /${commandName} to create a backup. SUCCESS`);
 			break;
 		}
 		case 'exit': {
@@ -438,12 +509,12 @@ client.on('interactionCreate', async interaction => {
 					content: 'I\'d rather not, to be honest.',
 					flags: EPHEMERAL,
 				});
-				localLog(`${guildName} (${guildId}): ${username} (${userId}) attempted to terminate the bot by issuing ${commandName}. FAIL`);
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) attempted to terminate the bot by issuing /${commandName}. FAIL`);
 				break;
 			}
 
 			await interaction.reply({ content: 'Process terminated.' });
-			localLog(`${guildName} (${guildId}): ${username} (${userId}) has terminated the bot by issuing ${commandName}. SUCCESS`);
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) has terminated the bot by issuing /${commandName}. SUCCESS`);
 			throw new Error(`Process terminated by \`${username}\` (${userId}).`);
 		}
 	}
