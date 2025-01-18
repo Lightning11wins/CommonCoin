@@ -97,6 +97,10 @@ class Bank {
 		localLog('Bank created.');
 	}
 
+	get totalMoney() {
+		return Object.values(bank.accounts).reduce((sum, value) => sum + value, 0);
+	}
+
 	getBal(userId, username) {
 		const { accounts } = this, id = userId.toString().trim();
 		if (accounts[id] === undefined) {
@@ -380,6 +384,7 @@ client.on('interactionCreate', async interaction => {
 			break;
 		}
 		case 'baltop': case 'top': case 'leaderboard': {
+			const { totalMoney } = bank;
 			const leaderboard = (await Promise.all(
 				Object.entries(bank.accounts)
 					.sort(([, a], [, b]) => b - a)
@@ -388,7 +393,8 @@ client.on('interactionCreate', async interaction => {
 					.map(async ({userPromise, id, bal}, i) => {
 						const user = await userPromise;
 						const name = (user) ? getName(user) : id;
-						return `${i+1}. ${displayMoney(bal)}: \`${name}\``;
+						const percentage = ((bal / totalMoney) * 100).toFixed(2);
+						return `${i+1}. ${displayMoney(bal)} (${percentage}%): \`${name}\``;
 					})
 				)).join('\n');
 
@@ -403,7 +409,7 @@ client.on('interactionCreate', async interaction => {
 			break;
 		}
 		case 'eco': case 'economy': {
-			const totalMoney = Object.values(bank.accounts).reduce((sum, value) => sum + value, 0);
+			const { totalMoney } = bank;
 
 			await interaction.reply({
 				embeds: [{
@@ -451,7 +457,6 @@ client.on('interactionCreate', async interaction => {
 
 // Start the bot.
 const startBot = async () => {
-
 	await deploy();
 	await client.login(TOKEN);
 
