@@ -1,9 +1,10 @@
 
 # Security
+*/accounts.json
+accounts.json
+logs/*
 src/secrets.js
 
 # Generated Files
 *-output.txt
 node_modules/*
-accounts.json
-*/accounts.json

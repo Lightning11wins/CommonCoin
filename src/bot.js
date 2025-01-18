@@ -11,6 +11,7 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const ALLOWED_DECIMALS = 2;
 const BACKUP_INTERVAL = 3600000;
 const BACKUP_PATH = 'backups';
+const LOG_PATH = 'logs';
 const BALTOP_PLACES = 10;
 const BRANDING_GOLD = 0xf9cc47;
 const DB_FILEPATH = 'accounts.json';
@@ -54,10 +55,23 @@ const getLock = async () => {
 	return releaseLock;
 };
 
+// Function to get the current time.
+const getDateTime = () => {
+	const now = new Date();
+	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}` +
+		`_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
+};
 
 // Log.
-const log = async (msg) => {
-	console.log('LOG: ' + msg);
+const logFilename = path.join(LOG_PATH, getDateTime() + '_log.txt');
+const localLog = (msg) => {
+	console.log('LOCAL LOG: ' + msg);
+	const entry = `[${getDateTime()}] ${msg}\n`;
+	const errorHandler = (err) => (err) && console.error('Local log error:', err);
+	fs.appendFile(logFilename, entry, errorHandler);
+};
+const discordLog = async (msg) => {
+	console.log('DISCORD LOG: ' + msg);
 	try {
 		await logChannel.send(msg);
 	} catch (error) {
@@ -67,6 +81,7 @@ const log = async (msg) => {
 
 class Bank {
 	constructor() {
+		localLog('Bank created.');
 		try {
 			const data = fs.readFileSync(DB_FILEPATH, 'utf8');
 			const accounts = this.accounts = JSON.parse(data);
@@ -86,17 +101,26 @@ class Bank {
 		const { accounts } = this, id = userId.toString().trim();
 		if (accounts[id] === undefined) {
 			this.dirty = true;
-			log(`Added ${username} with balance of $0.00`).then();
+			localLog(`Added ${username} with balance of $0.00`);
+			discordLog({
+				embeds: [{
+					title: 'New Account',
+					description: `Added ${username} with balance of $0.00`,
+					color: BRANDING_GOLD,
+				}],
+			}).then();
 			return accounts[id] = 0;
 		}
 		return accounts[id];
 	}
 	setBal(userId, newBal) {
+		localLog('Bank created.');
 		const { accounts } = this, id = userId.toString().trim();
 		if (accounts[id] === undefined) {
 			throw new Error('Setting nonexistent user ID: ' + id);
 		}
 
+		localLog(`Set balance of ${userId} to ${newBal}.`);
 		this.dirty = true;
 		accounts[id] = newBal;
 	}
@@ -107,7 +131,7 @@ class Bank {
 
 			const data = JSON.stringify(this.accounts, null, 2);
 			fs.writeFileSync(DB_FILEPATH, data, 'utf8');
-			console.log('Transaction committed, ready for backup.');
+			localLog('Transaction committed');
 		}
 	}
 	backup() {
@@ -115,25 +139,26 @@ class Bank {
 			this.commit();
 			this.needsBackup = false;
 
-			const now = new Date();
-			const filename = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}` +
-				`_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}.json`;
+			const filename = getDateTime() + '.json';
 			const filepath = path.join(BACKUP_PATH, filename);
 
 			const data = JSON.stringify(this.accounts, null, 2);
 			fs.writeFileSync(filepath, data, 'utf8');
-			console.log('Backup created');
+			localLog('Backup created');
 
 			return filepath;
 		}
 	}
 }
 
+// Bot setup.
 client.once('ready', async () => {
 	bank = new Bank();
 	logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
+	localLog('Setup complete');
 });
 
+// Bot command handling.
 client.on('interactionCreate', async interaction => {
 	const startTime = performance.now();
 	if (!interaction.isCommand()) {
@@ -154,13 +179,14 @@ client.on('interactionCreate', async interaction => {
 			}],
 			flags: EPHEMERAL,
 		});
+		localLog(`Blocked ${username} (${userId}), who is not a member of the closed beta. FAIL`);
 		return;
 	}
 
 	// Acquire the bot db lock, which is needed for reads and writes.
 	const releaseLock = await getLock();
 
-	// Parse the command.
+	// Execute the command.
 	const { commandName } = interaction;
 	switch (commandName) {
 		case 'whoami': {
@@ -168,16 +194,19 @@ client.on('interactionCreate', async interaction => {
 				content: `Your Discord UUID is: \`${userId}\``,
 				flags: EPHEMERAL,
 			});
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) used ${commandName}. SUCCESS`);
 			break;
 		}
 		case 'bal': case 'balance': {
 			const param1 = interaction.options.getUser('user'), target = param1 || user;
-			const id = target.id, username = getName(target);
-			const balance = bank.getBal(id, username);
+			const id = target.id, targetUsername = getName(target);
+
+			const balance = bank.getBal(id, targetUsername);
 			bank.commit();
 
-			const name = (id === userId || !param1) ? 'Your' : `\`${username}\`'s`;
+			const name = (id === userId || !param1) ? 'Your' : `\`${targetUsername}\`'s`;
 			await interaction.reply({ content: `${name} balance: ${displayMoney(balance)}` });
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) used ${commandName} on ${targetUsername}. SUCCESS`);
 			break;
 		}
 		case 'pay': case 'transfer': {
@@ -194,67 +223,73 @@ client.on('interactionCreate', async interaction => {
 			if (amount <= 0) {
 				await interaction.reply({
 					embeds: [{
-						title: "Transfer Failed",
+						title: 'Transfer Failed',
 						description: `Nice try, but ${displayMoney(amount)} is a negative number.`,
 						color: BRANDING_GOLD,
 					}],
 					flags: EPHEMERAL,
 				});
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because amount was ${amount}. FAIL`);
 				break;
 			}
 			if (newUserBal < 0) {
 				await interaction.reply({
 					embeds: [{
-						title: "Transfer Failed",
-						description: `${displayMoney(userBal)} - ${displayMoney(amount)} = ${displayMoney(newUserBal)}! (Going into debt is not allowed)`,
+						title: 'Transfer Failed',
+						description: `${displayMoney(userBal)} - ${displayMoney(amount)} = ${displayMoney(newUserBal)}! (Going into debt is not allowed.)`,
 						color: BRANDING_GOLD,
 					}],
 					flags: EPHEMERAL,
 				});
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because ${userBal} - ${amount} = ${newUserBal}. (Going into debt is not allowed.) FAIL`);
 				break;
 			}
 			if (recipientId === botId) {
 				await interaction.reply({
 					embeds: [{
-						title: "Transfer Failed",
+						title: 'Transfer Failed',
 						description: 'You cannot send money to the economy bot.',
 						color: BRANDING_GOLD,
 					}],
 					flags: EPHEMERAL,
 				});
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because you cannot transfer money to the economy bot. FAIL`);
 				break;
 			}
 			if (recipientId === userId) {
 				await interaction.reply({
 					embeds: [{
-						title: "Transfer Failed",
+						title: 'Transfer Failed',
 						description: 'You cannot send money to yourself.',
 						color: BRANDING_GOLD,
 					}],
 					flags: EPHEMERAL,
 				});
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because you cannot transfer money to yourself. FAIL`);
 				break;
 			}
 			if (reason.length < MIN_REASON_LENGTH) {
 				await interaction.reply({
 					embeds: [{
-						title: "Transfer Failed",
-						description: `Your reason should be **at least ${MIN_REASON_LENGTH}** characters long.`,
+						title: 'Transfer Failed',
+						description: `Your reason should be **at least ${MIN_REASON_LENGTH}** characters long. FAIL`,
 						color: BRANDING_GOLD,
 					}],
 					flags: EPHEMERAL,
 				});
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because the reason was shorter than the min length (${reason.length} < ${MIN_REASON_LENGTH}. FAIL\n> Reason: ${reason}`);
 				return;
 			}
 			if (reason.length > MAX_REASON_LENGTH) {
 				await interaction.reply({
 					embeds: [{
-						title: "Transfer Failed",
+						title: 'Transfer Failed',
 						description: `Your reason should be **at most ${MAX_REASON_LENGTH}** characters long.`,
 						color: BRANDING_GOLD,
 					}],
 					flags: EPHEMERAL,
 				});
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) failed to use ${commandName} because the reason was longer than the max length (${reason.length} > ${MAX_REASON_LENGTH}). FAIL\n> Reason: ${reason}`);
 				return;
 			}
 
@@ -264,7 +299,21 @@ client.on('interactionCreate', async interaction => {
 			bank.commit();
 
 			// Logging.
-			const logPromise = log(`${guildName} (${guildId}): \`${username}\` (${userId}) payed ${displayMoney(amount)} to \`${recipientUsername}\` (${recipientId}). Reason: ${reason}`);
+			const logPromise = discordLog({
+				embeds: [{
+					title: 'Disclosure: Common Coin Transferred',
+					description: [
+						'**Sender**: ' + username,
+						'**Recipient**: ' + recipientUsername,
+						'**Amount**: ' + displayMoney(amount),
+						'**Reason**:',
+						'> ' + reason,
+						'',
+						'Location: ' + guildName,
+					].join('\n'),
+					color: BRANDING_GOLD,
+				}],
+			});
 			await interaction.reply({
 				embeds: [{
 					title: "Common Coin Transferred",
@@ -276,29 +325,47 @@ client.on('interactionCreate', async interaction => {
 					color: BRANDING_GOLD,
 				}],
 			});
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) transferred ${amount} to ${recipientUsername} (${recipientId}) with ${commandName}. SUCCESS\n> Reason: ${reason}`);
 			await logPromise;
 			break;
 		}
 		case 'mint': {
+			// Calculations.
+			const recipient = interaction.options.getUser('user'), recipientId = recipient.id, recipientUsername = getName(recipient);
+			const amount = toNumber(interaction.options.getNumber('amount'));
+			const userBal = bank.getBal(recipientId, username), newBal = userBal + amount;
+
+			// Authentication.
 			if (!isAdmin(userId)) {
 				await interaction.reply({
 					content: 'no lol :)',
 					flags: EPHEMERAL,
 				});
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) attempted to mint ${amount} for ${recipientUsername} (${recipientId}). FAIL`);
 				break;
 			}
-
-			// Calculations.
-			const recipient = interaction.options.getUser('user'), recipientId = recipient.id, recipientUsername = getName(recipient);
-			const amount = toNumber(interaction.options.getNumber('amount'));
-			const userBal = bank.getBal(recipientId, username), newBal = userBal + amount;
 
 			// Make the transaction.
 			bank.setBal(recipientId, newBal);
 			bank.commit();
 
 			// Logging.
-			const logPromise = log(`${guildName} (${guildId}): ${username} (${userId}) minted ${displayMoney(amount)} for ${recipientUsername} (${recipientId}) in exchange for diamonds deposited into the vault.`);
+			const logPromise = discordLog({
+				embeds: [{
+					title: 'Disclosure: Common Coin Minted',
+					description: [
+						'**Issuer**: ' + username,
+						'**Recipient**: ' + recipientUsername,
+						'**Amount**: ' + displayMoney(amount),
+						'',
+						'Location: ' + guildName,
+						'',
+						'The corresponding quantity of diamonds has been',
+						'deposited into The Guild\'s central vault.',
+					].join('\n'),
+					color: BRANDING_GOLD,
+				}],
+			});
 			await interaction.reply({
 				embeds: [{
 					title: "Common Coin Minted",
@@ -306,6 +373,7 @@ client.on('interactionCreate', async interaction => {
 					color: BRANDING_GOLD,
 				}],
 			});
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) minted ${amount} for ${recipientUsername} (${recipientId}). SUCCESS`);
 			await logPromise;
 			break;
 		}
@@ -329,6 +397,7 @@ client.on('interactionCreate', async interaction => {
 					color: BRANDING_GOLD,
 				}],
 			});
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) checked the leaderboard with ${commandName}. SUCCESS`);
 			break;
 		}
 		case 'backup': {
@@ -338,7 +407,8 @@ client.on('interactionCreate', async interaction => {
 			}
 
 			const backupName = bank.backup();
-			await interaction.reply(`Backup created: \`${backupName}\``);
+			await interaction.reply({ content: `Backup created: \`${backupName}\`` });
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) issued ${commandName} to create a backup. SUCCESS`);
 			break;
 		}
 		case 'exit': {
@@ -347,10 +417,12 @@ client.on('interactionCreate', async interaction => {
 					content: 'I\'d rather not, to be honest.',
 					flags: EPHEMERAL,
 				});
+				localLog(`${guildName} (${guildId}): ${username} (${userId}) attempted to terminate the bot by issuing ${commandName}. FAIL`);
 				break;
 			}
 
 			await interaction.reply({ content: 'Process terminated.' });
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) has terminated the bot by issuing ${commandName}. SUCCESS`);
 			throw new Error(`Process terminated by \`${username}\` (${userId}).`);
 		}
 	}
@@ -359,7 +431,7 @@ client.on('interactionCreate', async interaction => {
 	releaseLock();
 
 	const timeSeconds = (performance.now() - startTime) / 1000;
-	console.log(`${commandName} completed after ${timeSeconds.toFixed(4)} seconds.`);
+	localLog(`Completed /${commandName} after ${timeSeconds.toFixed(4)} seconds.`);
 });
 
 // Start the bot.
@@ -377,7 +449,7 @@ const startBot = async () => {
 	}, BACKUP_INTERVAL);
 
 	const timeSeconds = (performance.now() - startTime) / 1000;
-	console.log(`Bot started after ${timeSeconds.toFixed(4)} seconds.`);
+	localLog(`Bot started after ${timeSeconds.toFixed(4)} seconds.`);
 };
 
 startBot().then();

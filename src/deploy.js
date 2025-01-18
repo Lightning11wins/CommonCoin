@@ -2,6 +2,9 @@
 const { REST, Routes } = require('discord.js');
 const { TOKEN, CLIENT_ID } = require('./secrets');
 
+// Bot install link.
+// https://discord.com/oauth2/authorize?client_id=1329578684960739359&permissions=67584&integration_type=0&scope=bot
+
 const Type = {
 	user: 6,
 	int: 4,
