@@ -265,7 +265,7 @@ client.on('interactionCreate', async interaction => {
 			const reason = interaction.options.getString('reason');
 
 			// Calculations.
-			const userBal = bank.getBal(userId, username), recipientBal = bank.getBal(recipientId, username);
+			const userBal = bank.getBal(userId, username), recipientBal = bank.getBal(recipientId, recipientUsername);
 			const newUserBal = userBal - amount, newRecipientBal = recipientBal + amount;
 
 			// Error checking.
@@ -382,7 +382,7 @@ client.on('interactionCreate', async interaction => {
 			// Calculations.
 			const recipient = interaction.options.getUser('user'), recipientId = recipient.id, recipientUsername = getName(recipient);
 			const amount = toNumber(interaction.options.getNumber('amount'));
-			const userBal = bank.getBal(recipientId, username), newBal = userBal + amount;
+			const userBal = bank.getBal(recipientId, recipientUsername), newBal = userBal + amount;
 
 			// Authentication.
 			if (!isAdmin(userId)) {
