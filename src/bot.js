@@ -241,7 +241,7 @@ client.on('interactionCreate', async interaction => {
 			const id = target.id, targetUsername = getName(target);
 
 			const balance = bank.getBal(id, targetUsername);
-			const factionName = factionsNameMap[bank.getFaction(userId)] ?? 'Unaffiliated';
+			const factionName = factionsNameMap[bank.getFaction(id)] ?? 'Unaffiliated';
 			bank.commit();
 
 			const name = (id === userId || !param1) ? 'Your' : `\`${targetUsername}\`'s`;
@@ -439,6 +439,7 @@ client.on('interactionCreate', async interaction => {
 			}
 
 			// Set the user's faction.
+			bank.getBal(userId, username);
 			bank.setFaction(userId, factionName);
 			bank.commit();
 
