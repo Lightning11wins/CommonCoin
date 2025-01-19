@@ -191,6 +191,21 @@ client.on('interactionCreate', async interaction => {
 		return;
 	}
 
+	if (!interaction.guild) {
+		await interaction.reply({
+			embeds: [{
+				title: 'Bot Error',
+				description: [
+					'This command can only be used on a server.',
+					'If you\'re on a server, it\'s possible you added the bot incorrectly.',
+					'Try kicking it and re-adding it using [this link](<https://discord.com/oauth2/authorize?client_id=1329578684960739359&permissions=67584&integration_type=0&scope=bot>).'
+				].join('\n'),
+				color: BRANDING_GOLD,
+			}],
+		});
+		return;
+	}
+
 	// Gather info.
 	const user = interaction.user, userId = user.id, username = getName(user);
 	const guild = interaction.guild, guildId = guild.id, guildName = guild.name;
@@ -208,6 +223,18 @@ client.on('interactionCreate', async interaction => {
 			});
 			localLog(`${guildName} (${guildId}): ${username} (${userId}) used /${commandName}. SUCCESS`);
 			break;
+		}
+		case 'invite': {
+			await interaction.reply({
+				embeds: [{
+					title: 'Bot Invitation',
+					description: 'Click [here](<https://discord.com/oauth2/authorize?client_id=1329578684960739359&permissions=67584&integration_type=0&scope=bot>) to invite the bot to a server.',
+					color: BRANDING_GOLD,
+				}],
+			});
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) used /${commandName}. SUCCESS`);
+			break;
+
 		}
 		case 'bal': case 'balance': {
 			const param1 = interaction.options.getUser('user'), target = param1 || user;

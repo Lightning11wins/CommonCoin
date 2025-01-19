@@ -40,6 +40,10 @@ const commands = [
 		description: 'Get your user id.',
 	},
 	{
+		name: 'invite',
+		description: 'Get the link to invite the bot to your own server',
+	},
+	{
 		name: 'bal',
 		description: 'Display your current balance.',
 		options: [
