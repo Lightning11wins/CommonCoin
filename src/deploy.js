@@ -14,7 +14,7 @@ const Type = {
 
 const factions = [
 	{ name: 'Astral Vanguard', value: 'astral'},
-	{ name: 'Auditor', value: 'auditor'},
+	{ name: 'Auditore', value: 'auditore'},
 	{ name: 'Blue Bird', value: 'blue_bird'},
 	{ name: 'Faelorn Darthulia', value: 'faelorn'},
 	{ name: 'Grand Kingdom of Khazabrar', value: 'dwarves'},
@@ -30,6 +30,7 @@ const factions = [
 	{ name: 'The Hand of Kravor', value: 'hand'},
 	{ name: 'The Knights of Camelot', value: 'knights'},
 	{ name: 'The Order of the Sun and Moon', value: 'order'},
+	{ name: 'The United Exchange', value: 'exchange'},
 	{ name: 'Umbra', value: 'umbra'},
 	{ name: 'Gods', value: 'gods'},
 ];
