@@ -56,43 +56,7 @@ const commands = [
 		]
 	},
 	{
-		name: 'balance',
-		description: 'Display your current balance.',
-		options: [
-			{
-				type: Type.user,
-				name: 'user',
-				description: 'The player you\'re checking.',
-				required: false,
-			}
-		]
-	},
-	{
 		name: 'pay',
-		description: 'Pay money to another player.',
-		options: [
-			{
-				type: Type.user,
-				name: 'user',
-				description: 'The player receiving the money.',
-				required: true,
-			},
-			{
-				type: Type.float,
-				name: 'amount',
-				description: 'The amount of money being sent.',
-				required: true,
-			},
-			{
-				type: Type.string,
-				name: 'reason',
-				description: 'The reason for sending the money',
-				required: true,
-			}
-		],
-	},
-	{
-		name: 'transfer',
 		description: 'Pay money to another player.',
 		options: [
 			{
@@ -147,48 +111,15 @@ const commands = [
 		],
 	},
 	{
-		name: 'joinfaction',
-		description: 'Specify your faction so that your money is counted for their net worth on the faction leaderboard.',
-		options: [
-			{
-				type: Type.string,
-				name: 'faction',
-				description: 'Select a faction (DM Lightning_11 if your faction is missing)',
-				required: true,
-				choices: factions,
-			},
-		],
-	},
-	{
-		name: 'baltop',
-		description: 'Show the richest players on the server.',
-	},
-	{
 		name: 'top',
 		description: 'Show the richest players on the server.',
-	},
-	{
-		name: 'leaderboard',
-		description: 'Show the richest players on the server.',
-	},
-	{
-		name: 'fbaltop',
-		description: 'Show the richest factions on the server.',
 	},
 	{
 		name: 'ftop',
 		description: 'Show the richest factions on the server.',
 	},
 	{
-		name: 'fleaderboard',
-		description: 'Show the richest factions on the server.',
-	},
-	{
 		name: 'eco',
-		description: 'Show the total money in circulation in the economy.',
-	},
-	{
-		name: 'economy',
 		description: 'Show the total money in circulation in the economy.',
 	},
 	{
