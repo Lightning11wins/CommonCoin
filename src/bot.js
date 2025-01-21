@@ -158,12 +158,13 @@ class Bank {
 			localLog('Transaction committed');
 		}
 	}
-	backup() {
-		if (this.needsBackup) {
+	backup(force) {
+		if (this.needsBackup || force) {
 			this.commit();
 			this.needsBackup = false;
 
 			const filename = getDateTime() + '.json';
+			console.log(`${BACKUP_PATH} + ${filename}`);
 			const filepath = path.join(BACKUP_PATH, filename);
 
 			const data = JSON.stringify(this.accounts, null, 2);
@@ -526,9 +527,9 @@ client.on('interactionCreate', async interaction => {
 				break;
 			}
 
-			const backupName = bank.backup();
+			const backupName = bank.backup(true);
 			await interaction.reply({ content: `Backup created: \`${backupName}\`` });
-			localLog(`${guildName} (${guildId}): ${username} (${userId}) issued /${commandName} to create a backup. SUCCESS`);
+			localLog(`${guildName} (${guildId}): ${username} (${userId}) issued /${commandName} to create backup '${backupName}'. SUCCESS`);
 			break;
 		}
 		case 'exit': {
