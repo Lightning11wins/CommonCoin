@@ -24,7 +24,7 @@ const BALTOP_PLACES = 10;
 const BRANDING_GOLD = 0xf9cc47;
 const DB_FILEPATH = 'accounts.json';
 const EPHEMERAL = 0b1000000;
-const LOG_CHANNEL_ID = '1330272746667511850';
+const LOG_CHANNEL_ID = '1332971195284586506'; // Dwarven #transparency-log
 const MAX_REASON_LENGTH = 1024;
 const MIN_REASON_LENGTH = 16;
 const botId = '1329578684960739359';
@@ -45,6 +45,7 @@ const isAdmin = (id) => {
 	const idStr = id.toString();
 	return (
 		idStr === '349274318196441088' || // Lightning
+		idStr === '329425303686610945' || // Accrayer
 		idStr === '973038141428629564'    // Ezran
 	);
 };
